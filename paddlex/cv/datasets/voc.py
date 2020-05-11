@@ -17,6 +17,7 @@ import copy
 import os.path as osp
 import random
 import numpy as np
+import traceback
 from collections import OrderedDict
 import xml.etree.ElementTree as ET
 import paddlex.utils.logging as logging
@@ -86,91 +87,95 @@ class VOCDetection(Dataset):
         with open(file_list, 'r', encoding=get_encoding(file_list)) as fr:
             while True:
                 line = fr.readline()
-                if not line:
-                    break
-                img_file, xml_file = [osp.join(data_dir, x) \
-                        for x in line.strip().split()[:2]]
-                if not is_pic(img_file):
-                    continue
-                if not osp.isfile(xml_file):
-                    continue
-                if not osp.exists(img_file):
-                    raise IOError(
-                        'The image file {} is not exist!'.format(img_file))
-                tree = ET.parse(xml_file)
-                if tree.find('id') is None:
-                    im_id = np.array([ct])
-                else:
-                    ct = int(tree.find('id').text)
-                    im_id = np.array([int(tree.find('id').text)])
+                try:
+                    if not line:
+                        break
+                    img_file, xml_file = [osp.join(data_dir, x) \
+                            for x in line.strip().split()[:2]]
+                    if not is_pic(img_file):
+                        continue
+                    if not osp.isfile(xml_file):
+                        continue
+                    if not osp.exists(img_file):
+                        raise IOError(
+                            'The image file {} is not exist!'.format(img_file))
+                    tree = ET.parse(xml_file)
+                    if tree.find('id') is None:
+                        im_id = np.array([ct])
+                    else:
+                        ct = int(tree.find('id').text)
+                        im_id = np.array([int(tree.find('id').text)])
 
-                objs = tree.findall('object')
-                im_w = float(tree.find('size').find('width').text)
-                im_h = float(tree.find('size').find('height').text)
-                gt_bbox = np.zeros((len(objs), 4), dtype=np.float32)
-                gt_class = np.zeros((len(objs), 1), dtype=np.int32)
-                gt_score = np.ones((len(objs), 1), dtype=np.float32)
-                is_crowd = np.zeros((len(objs), 1), dtype=np.int32)
-                difficult = np.zeros((len(objs), 1), dtype=np.int32)
-                for i, obj in enumerate(objs):
-                    cname = obj.find('name').text
-                    gt_class[i][0] = cname2cid[cname]
-                    _difficult = int(obj.find('difficult').text)
-                    x1 = float(obj.find('bndbox').find('xmin').text)
-                    y1 = float(obj.find('bndbox').find('ymin').text)
-                    x2 = float(obj.find('bndbox').find('xmax').text)
-                    y2 = float(obj.find('bndbox').find('ymax').text)
-                    x1 = max(0, x1)
-                    y1 = max(0, y1)
-                    x2 = min(im_w - 1, x2)
-                    y2 = min(im_h - 1, y2)
-                    gt_bbox[i] = [x1, y1, x2, y2]
-                    is_crowd[i][0] = 0
-                    difficult[i][0] = _difficult
-                    annotations['annotations'].append({
-                        'iscrowd':
-                        0,
-                        'image_id':
-                        int(im_id[0]),
-                        'bbox': [x1, y1, x2 - x1 + 1, y2 - y1 + 1],
-                        'area':
-                        float((x2 - x1 + 1) * (y2 - y1 + 1)),
-                        'category_id':
-                        cname2cid[cname],
-                        'id':
-                        ann_ct,
-                        'difficult':
-                        _difficult
-                    })
-                    ann_ct += 1
+                    objs = tree.findall('object')
+                    im_w = float(tree.find('size').find('width').text)
+                    im_h = float(tree.find('size').find('height').text)
+                    gt_bbox = np.zeros((len(objs), 4), dtype=np.float32)
+                    gt_class = np.zeros((len(objs), 1), dtype=np.int32)
+                    gt_score = np.ones((len(objs), 1), dtype=np.float32)
+                    is_crowd = np.zeros((len(objs), 1), dtype=np.int32)
+                    difficult = np.zeros((len(objs), 1), dtype=np.int32)
+                    for i, obj in enumerate(objs):
+                        cname = obj.find('name').text
+                        gt_class[i][0] = cname2cid[cname]
+                        _difficult = int(obj.find('difficult').text)
+                        x1 = float(obj.find('bndbox').find('xmin').text)
+                        y1 = float(obj.find('bndbox').find('ymin').text)
+                        x2 = float(obj.find('bndbox').find('xmax').text)
+                        y2 = float(obj.find('bndbox').find('ymax').text)
+                        x1 = max(0, x1)
+                        y1 = max(0, y1)
+                        x2 = min(im_w - 1, x2)
+                        y2 = min(im_h - 1, y2)
+                        gt_bbox[i] = [x1, y1, x2, y2]
+                        is_crowd[i][0] = 0
+                        difficult[i][0] = _difficult
+                        annotations['annotations'].append({
+                            'iscrowd':
+                            0,
+                            'image_id':
+                            int(im_id[0]),
+                            'bbox': [x1, y1, x2 - x1 + 1, y2 - y1 + 1],
+                            'area':
+                            float((x2 - x1 + 1) * (y2 - y1 + 1)),
+                            'category_id':
+                            cname2cid[cname],
+                            'id':
+                            ann_ct,
+                            'difficult':
+                            _difficult
+                        })
+                        ann_ct += 1
 
-                im_info = {
-                    'im_id': im_id,
-                    'image_shape': np.array([im_h, im_w]).astype('int32'),
-                }
-                label_info = {
-                    'is_crowd': is_crowd,
-                    'gt_class': gt_class,
-                    'gt_bbox': gt_bbox,
-                    'gt_score': gt_score,
-                    'gt_poly': [],
-                    'difficult': difficult
-                }
-                voc_rec = (im_info, label_info)
-                if len(objs) != 0:
-                    self.file_list.append([img_file, voc_rec])
-                    ct += 1
-                    annotations['images'].append({
-                        'height':
-                        im_h,
-                        'width':
-                        im_w,
-                        'id':
-                        int(im_id[0]),
-                        'file_name':
-                        osp.split(img_file)[1]
-                    })
-
+                    im_info = {
+                        'im_id': im_id,
+                        'image_shape': np.array([im_h, im_w]).astype('int32'),
+                    }
+                    label_info = {
+                        'is_crowd': is_crowd,
+                        'gt_class': gt_class,
+                        'gt_bbox': gt_bbox,
+                        'gt_score': gt_score,
+                        'gt_poly': [],
+                        'difficult': difficult
+                    }
+                    voc_rec = (im_info, label_info)
+                    if len(objs) != 0:
+                        self.file_list.append([img_file, voc_rec])
+                        ct += 1
+                        annotations['images'].append({
+                            'height':
+                            im_h,
+                            'width':
+                            im_w,
+                            'id':
+                            int(im_id[0]),
+                            'file_name':
+                            osp.split(img_file)[1]
+                        })
+                except Exception as e:
+                    logging.error("Error occurs while process {}".format(
+                        line.strip()))
+                    raise e
         if not len(self.file_list) > 0:
             raise Exception('not found any voc record in %s' % (file_list))
         logging.info("{} samples in file {}".format(
