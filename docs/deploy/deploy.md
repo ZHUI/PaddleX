@@ -22,16 +22,6 @@ paddlex --export_inference --model_dir=./xiaoduxiong_epoch_12 --save_dir=./infer
 paddlex --export_inference --model_dir=./xiaoduxiong_epoch_12 --save_dir=./inference_model --fixed_input_shape=[640,960]
 ```
 
-### Python部署
-PaddleX已经集成了基于Python的高性能预测接口，在安装PaddleX后，可参照如下代码示例，进行预测。相关的接口文档可参考[paddlex.deploy](apis/deploy.md)
-> 点击下载测试图片 [xiaoduxiong_test_image.tar.gz](https://bj.bcebos.com/paddlex/datasets/xiaoduxiong_test_image.tar.gz)
-
-```
-import paddlex as pdx
-predictor = pdx.deploy.create_predictor('./inference_model')
-result = predictor.predict(image='xiaoduxiong_test_image/JPEGImages/WeChatIMG110.jpeg')
-```
-
 ### C++部署
 
 C++部署方案位于目录`deploy/cpp/`下，且独立于PaddleX其他模块。该方案支持在 Windows 和 Linux 完成编译、二次开发集成和部署运行。具体使用方法和编译：
